@@ -27,17 +27,17 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 /* Structures                                                                 */
 /* -------------------------------------------------------------------------- */
 
-struct autocomplete_config {
-    int32_t max_delay_ms;
+struct autocomplete_sequence {
+    const struct zmk_behavior_binding *bindings;
+    uint8_t binding_len;
 
-    struct autocomplete_sequence **sequences;
-    uint8_t sequence_count;
+    uint32_t encoded[AUTOCOMPLETE_HISTORY_SIZE];
 };
 
 struct autocomplete_config {
     int32_t max_delay_ms;
 
-    struct autocomplete_sequence *sequences;
+    struct autocomplete_sequence **sequences;
     uint8_t sequence_count;
 };
 
@@ -278,7 +278,7 @@ static int collect_matches(
              i++) {
 
             struct autocomplete_sequence *seq =
-                cfg->sequences[i];
+                &cfg->sequences[i];
 
             if (sequence_matches(
                     seq,
@@ -443,7 +443,7 @@ static int autocomplete_init(
          i++) {
 
         struct autocomplete_sequence *seq =
-            cfg->sequences[i];
+            &cfg->sequences[i];
 
         for (uint8_t j = 0;
              j < seq->binding_len;
