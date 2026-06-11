@@ -23,15 +23,21 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #define AUTOCOMPLETE_HISTORY_SIZE \
     CONFIG_ZMK_AUTOCOMPLETE_HISTORY_SIZE
 
+/* -------------------------------------------------------------------------- */
+/* Structures                                                                 */
+/* -------------------------------------------------------------------------- */
+
 struct autocomplete_sequence {
-    const uint32_t *sequence;
-    uint8_t sequence_len;
+    const struct zmk_behavior_binding *bindings;
+    uint8_t binding_len;
+
+    uint32_t encoded[AUTOCOMPLETE_HISTORY_SIZE];
 };
 
 struct autocomplete_config {
     int32_t max_delay_ms;
 
-    const struct autocomplete_sequence *sequences;
+    struct autocomplete_sequence *sequences;
     uint8_t sequence_count;
 };
 
@@ -45,6 +51,43 @@ struct autocomplete_data {
 
     bool firing;
 };
+
+/* -------------------------------------------------------------------------- */
+/* Helpers                                                                    */
+/* -------------------------------------------------------------------------- */
+
+static inline bool is_modifier_keycode(
+    uint32_t keycode
+) {
+    return
+        keycode >= HID_USAGE_KEY_KEYBOARD_LEFTCONTROL &&
+        keycode <= HID_USAGE_KEY_KEYBOARD_RIGHT_GUI;
+}
+
+static inline uint32_t encode_key(
+    uint8_t mods,
+    uint8_t usage_page,
+    uint8_t keycode
+) {
+    return
+        ((uint32_t)mods << 24) |
+        ((uint32_t)usage_page << 16) |
+        (uint32_t)keycode;
+}
+
+static inline uint32_t encoded_from_event(
+    const struct zmk_keycode_state_changed *ev
+) {
+    uint8_t mods =
+        ev->implicit_modifiers |
+        ev->explicit_modifiers;
+
+    return encode_key(
+        mods,
+        ev->usage_page,
+        ev->keycode
+    );
+}
 
 /* -------------------------------------------------------------------------- */
 /* History                                                                    */
@@ -99,42 +142,54 @@ static bool history_tail(
     return true;
 }
 
-static inline uint32_t encoded_from_event(
-    const struct zmk_keycode_state_changed *ev
+/* -------------------------------------------------------------------------- */
+/* Binding encoding                                                           */
+/* -------------------------------------------------------------------------- */
+
+static uint32_t binding_to_encoded(
+    const struct zmk_behavior_binding *binding
 ) {
+    /*
+     * Assumes &kp-compatible bindings.
+     *
+     * param1 layout:
+     * bits 0-7   = keycode
+     * bits 8-15  = modifiers
+     */
+
+    uint32_t kp =
+        binding->param1;
+
+    uint8_t keycode =
+        kp & 0xFF;
+
     uint8_t mods =
-        ev->implicit_modifiers |
-        ev->explicit_modifiers;
+        (kp >> 8) & 0xFF;
 
-    return
-        ((uint32_t)mods << 24) |
-        ((uint32_t)ev->usage_page << 16) |
-        (uint32_t)ev->keycode;
-}
-
-static bool is_modifier_keycode(
-    uint32_t keycode
-) {
-    return
-        keycode >= HID_USAGE_KEY_KEYBOARD_LEFTCONTROL &&
-        keycode <= HID_USAGE_KEY_KEYBOARD_RIGHT_GUI;
+    return encode_key(
+        mods,
+        HID_USAGE_KEY,
+        keycode
+    );
 }
 
 /* -------------------------------------------------------------------------- */
 /* Matching                                                                   */
 /* -------------------------------------------------------------------------- */
 
-static bool sequence_matches_history(
+static bool sequence_matches(
     const struct autocomplete_sequence *seq,
     const uint32_t *history,
     uint8_t history_len
 ) {
-    if (history_len > seq->sequence_len) {
+    if (history_len >
+        seq->binding_len) {
+
         return false;
     }
 
     return memcmp(
-        seq->sequence,
+        seq->encoded,
         history,
         history_len * sizeof(uint32_t)
     ) == 0;
@@ -152,20 +207,28 @@ static uint8_t longest_shared_prefix(
 
     while (1) {
 
-        if (pos >= matches[0]->sequence_len) {
+        if (pos >=
+            matches[0]->binding_len) {
+
             return pos;
         }
 
         uint32_t value =
-            matches[0]->sequence[pos];
+            matches[0]->encoded[pos];
 
-        for (uint8_t i = 1; i < count; i++) {
+        for (uint8_t i = 1;
+             i < count;
+             i++) {
 
-            if (pos >= matches[i]->sequence_len) {
+            if (pos >=
+                matches[i]->binding_len) {
+
                 return pos;
             }
 
-            if (matches[i]->sequence[pos] != value) {
+            if (matches[i]->encoded[pos] !=
+                value) {
+
                 return pos;
             }
         }
@@ -185,7 +248,8 @@ static int collect_matches(
         AUTOCOMPLETE_HISTORY_SIZE
     ];
 
-    int64_t now = k_uptime_get();
+    int64_t now =
+        k_uptime_get();
 
     if (cfg->max_delay_ms > 0 &&
         (now - data->last_press_time) >
@@ -213,10 +277,10 @@ static int collect_matches(
              i < cfg->sequence_count;
              i++) {
 
-            const struct autocomplete_sequence *seq =
+            struct autocomplete_sequence *seq =
                 &cfg->sequences[i];
 
-            if (sequence_matches_history(
+            if (sequence_matches(
                     seq,
                     window,
                     len
@@ -242,9 +306,9 @@ static int collect_matches(
 /* Emission                                                                   */
 /* -------------------------------------------------------------------------- */
 
-static int emit_sequence(
+static int emit_completion(
     struct autocomplete_data *data,
-    const uint32_t *sequence,
+    const struct autocomplete_sequence *seq,
     uint8_t start,
     uint8_t end,
     struct zmk_behavior_binding_event event
@@ -255,42 +319,35 @@ static int emit_sequence(
          i < end;
          i++) {
 
-        uint32_t encoded =
-            sequence[i];
+        const struct zmk_behavior_binding *binding =
+            &seq->bindings[i];
 
-        uint8_t usage_page =
-            (encoded >> 16) & 0xFF;
-
-        uint8_t keycode =
-            encoded & 0xFF;
-
-        struct zmk_behavior_binding binding = {
-            .behavior_dev = "KEY_PRESS",
-            .param1 = keycode,
-            .param2 = 0,
-        };
-
-        ret = zmk_behavior_invoke_binding(
-            &binding,
-            event,
-            true
-        );
+        ret =
+            zmk_behavior_invoke_binding(
+                binding,
+                event,
+                true
+            );
 
         if (ret < 0) {
             return ret;
         }
 
-        ret = zmk_behavior_invoke_binding(
-            &binding,
-            event,
-            false
-        );
+        ret =
+            zmk_behavior_invoke_binding(
+                binding,
+                event,
+                false
+            );
 
         if (ret < 0) {
             return ret;
         }
 
-        history_push(data, encoded);
+        history_push(
+            data,
+            seq->encoded[i]
+        );
     }
 
     return 0;
@@ -325,11 +382,16 @@ static int autocomplete_listener(
         return ZMK_EV_EVENT_BUBBLE;
     }
 
-    if (ev->usage_page != HID_USAGE_KEY) {
+    if (ev->usage_page !=
+        HID_USAGE_KEY) {
+
         return ZMK_EV_EVENT_BUBBLE;
     }
 
-    if (is_modifier_keycode(ev->keycode)) {
+    if (is_modifier_keycode(
+            ev->keycode
+        )) {
+
         return ZMK_EV_EVENT_BUBBLE;
     }
 
@@ -364,6 +426,38 @@ ZMK_SUBSCRIPTION(
     autocomplete,
     zmk_keycode_state_changed
 );
+
+/* -------------------------------------------------------------------------- */
+/* Init                                                                       */
+/* -------------------------------------------------------------------------- */
+
+static int autocomplete_init(
+    const struct device *dev
+) {
+    struct autocomplete_config *cfg =
+        (struct autocomplete_config *)
+            dev->config;
+
+    for (uint8_t i = 0;
+         i < cfg->sequence_count;
+         i++) {
+
+        struct autocomplete_sequence *seq =
+            &cfg->sequences[i];
+
+        for (uint8_t j = 0;
+             j < seq->binding_len;
+             j++) {
+
+            seq->encoded[j] =
+                binding_to_encoded(
+                    &seq->bindings[j]
+                );
+        }
+    }
+
+    return 0;
+}
 
 /* -------------------------------------------------------------------------- */
 /* Behavior                                                                   */
@@ -413,16 +507,18 @@ static int autocomplete_binding_released(
             match_count
         );
 
-    if (shared_len <= history_len) {
+    if (shared_len <=
+        history_len) {
+
         return 0;
     }
 
     data->firing = true;
 
     int ret =
-        emit_sequence(
+        emit_completion(
             data,
-            matches[0]->sequence,
+            matches[0],
             history_len,
             shared_len,
             event
@@ -443,77 +539,110 @@ autocomplete_driver_api = {
 };
 
 /* -------------------------------------------------------------------------- */
-/* DT helpers                                                                 */
+/* DT Helpers                                                                 */
 /* -------------------------------------------------------------------------- */
 
-#define AC_CHILD_DECL(child)                    \
-    static const uint32_t                      \
-        ac_sequence_##child[] =                \
-            DT_PROP(child, sequence);
+#define AUTOCOMPLETE_BINDING_ENTRY(node_id, prop, idx) \
+    {                                                  \
+        .behavior_dev = DEVICE_DT_NAME(                \
+            DT_PHANDLE_BY_IDX(                         \
+                node_id,                               \
+                prop,                                  \
+                idx                                    \
+            )                                          \
+        ),                                             \
+                                                       \
+        .param1 =                                      \
+            DT_PHA_BY_IDX_OR(                          \
+                node_id,                               \
+                prop,                                  \
+                idx,                                   \
+                param1,                                \
+                0                                      \
+            ),                                         \
+                                                       \
+        .param2 =                                      \
+            DT_PHA_BY_IDX_OR(                          \
+                node_id,                               \
+                prop,                                  \
+                idx,                                   \
+                param2,                                \
+                0                                      \
+            ),                                         \
+    },
 
-#define AC_SEQ_INIT(child)                     \
-    {                                          \
-        .sequence =                            \
-            ac_sequence_##child,               \
-                                               \
-        .sequence_len =                        \
-            ARRAY_SIZE(                        \
-                ac_sequence_##child            \
-            ),                                 \
+#define AC_CHILD_DECL(child)                           \
+    static const                                       \
+        struct zmk_behavior_binding                    \
+        ac_bindings_##child[] = {                      \
+            DT_FOREACH_PROP_ELEM(                      \
+                child,                                 \
+                bindings,                              \
+                AUTOCOMPLETE_BINDING_ENTRY             \
+            )                                          \
+    };
+
+#define AC_SEQ_INIT(child)                             \
+    {                                                  \
+        .bindings =                                    \
+            ac_bindings_##child,                       \
+                                                       \
+        .binding_len =                                 \
+            ARRAY_SIZE(                                \
+                ac_bindings_##child                    \
+            ),                                         \
     },
 
 /* -------------------------------------------------------------------------- */
 /* Instantiation                                                              */
 /* -------------------------------------------------------------------------- */
 
-#define AUTOCOMPLETE_INST(n)                   \
-                                               \
-    DT_FOREACH_CHILD(                          \
-        DT_DRV_INST(n),                        \
-        AC_CHILD_DECL                          \
-    )                                          \
-                                               \
-    static const                               \
-        struct autocomplete_sequence           \
-        ac_sequences_##n[] = {                 \
-                                               \
-            DT_FOREACH_CHILD(                  \
-                DT_DRV_INST(n),                \
-                AC_SEQ_INIT                    \
-            )                                  \
-    };                                         \
-                                               \
-    static const                               \
-        struct autocomplete_config             \
-        ac_cfg_##n = {                         \
-                                               \
-            .max_delay_ms =                    \
-                DT_INST_PROP(                  \
-                    n,                         \
-                    max_delay_ms               \
-                ),                             \
-                                               \
-            .sequences =                       \
-                ac_sequences_##n,              \
-                                               \
-            .sequence_count =                  \
-                ARRAY_SIZE(                    \
-                    ac_sequences_##n           \
-                ),                             \
-    };                                         \
-                                               \
-    static struct autocomplete_data            \
-        ac_data_##n;                           \
-                                               \
-    BEHAVIOR_DT_INST_DEFINE(                   \
-        n,                                     \
-        NULL,                                  \
-        NULL,                                  \
-        &ac_data_##n,                          \
-        &ac_cfg_##n,                           \
-        APPLICATION,                           \
-        CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,   \
-        &autocomplete_driver_api               \
+#define AUTOCOMPLETE_INST(n)                           \
+                                                       \
+    DT_FOREACH_CHILD(                                  \
+        DT_DRV_INST(n),                                \
+        AC_CHILD_DECL                                  \
+    )                                                  \
+                                                       \
+    static struct autocomplete_sequence                \
+        ac_sequences_##n[] = {                         \
+                                                       \
+            DT_FOREACH_CHILD(                          \
+                DT_DRV_INST(n),                        \
+                AC_SEQ_INIT                            \
+            )                                          \
+    };                                                 \
+                                                       \
+    static struct autocomplete_config                  \
+        ac_cfg_##n = {                                 \
+                                                       \
+            .max_delay_ms =                            \
+                DT_INST_PROP(                          \
+                    n,                                 \
+                    max_delay_ms                       \
+                ),                                     \
+                                                       \
+            .sequences =                               \
+                ac_sequences_##n,                      \
+                                                       \
+            .sequence_count =                          \
+                ARRAY_SIZE(                            \
+                    ac_sequences_##n                   \
+                ),                                     \
+    };                                                 \
+                                                       \
+    static struct autocomplete_data                    \
+        ac_data_##n;                                   \
+                                                       \
+    BEHAVIOR_DT_INST_DEFINE(                           \
+        n,                                             \
+        autocomplete_init,                             \
+        NULL,                                          \
+        &ac_data_##n,                                  \
+        &ac_cfg_##n,                                   \
+        APPLICATION,                                   \
+        CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,           \
+        &autocomplete_driver_api                       \
     );
 
 DT_INST_FOREACH_STATUS_OKAY(

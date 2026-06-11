@@ -1,4 +1,4 @@
-description: Autocomplete behavior
+description: ZMK autocomplete behavior
 
 compatible: "zmk,behavior-autocomplete"
 
@@ -11,6 +11,7 @@ properties:
 
 child-binding-properties:
   properties:
-    sequence:
-      type: array
+    bindings:
+      type: phandle-array
       required: true
+
