@@ -27,11 +27,11 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 /* Structures                                                                 */
 /* -------------------------------------------------------------------------- */
 
-struct autocomplete_sequence {
-    const struct zmk_behavior_binding *bindings;
-    uint8_t binding_len;
+struct autocomplete_config {
+    int32_t max_delay_ms;
 
-    uint32_t encoded[AUTOCOMPLETE_HISTORY_SIZE];
+    struct autocomplete_sequence **sequences;
+    uint8_t sequence_count;
 };
 
 struct autocomplete_config {
@@ -278,7 +278,7 @@ static int collect_matches(
              i++) {
 
             struct autocomplete_sequence *seq =
-                &cfg->sequences[i];
+                cfg->sequences[i];
 
             if (sequence_matches(
                     seq,
@@ -443,7 +443,7 @@ static int autocomplete_init(
          i++) {
 
         struct autocomplete_sequence *seq =
-            &cfg->sequences[i];
+            cfg->sequences[i];
 
         for (uint8_t j = 0;
              j < seq->binding_len;
@@ -542,11 +542,6 @@ autocomplete_driver_api = {
 /* DT Helpers                                                                 */
 /* -------------------------------------------------------------------------- */
 
-#define AC_NODE(n) DT_DRV_INST(n)
-
-#define AC_CHILD(node_id, idx) \
-    DT_CHILD_BY_IDX(node_id, idx)
-
 #define AC_BINDING_ENTRY(node_id, idx)                 \
     {                                                  \
         .behavior_dev = DEVICE_DT_NAME(                \
@@ -607,112 +602,44 @@ autocomplete_driver_api = {
     AC_BINDINGS_8(node_id),    \
     AC_BINDING_ENTRY(node_id, 8)
 
-#define AC_SELECT_BINDINGS(count) \
-    AC_BINDINGS_##count
+#define AC_CAT(a, b) a##b
+#define AC_EVAL(a, b) AC_CAT(a, b)
 
-#define AC_DECLARE_CHILD(inst, child_idx)                              \
-                                                                        \
-    static const struct zmk_behavior_binding                           \
-        ac_bindings_##inst##_##child_idx[] = {                         \
-            AC_SELECT_BINDINGS(                                        \
-                DT_PROP_LEN(                                           \
-                    AC_CHILD(AC_NODE(inst), child_idx),                \
-                    bindings                                           \
-                )                                                      \
-            )(                                                         \
-                AC_CHILD(AC_NODE(inst), child_idx)                     \
-            )                                                          \
+#define AC_DECLARE_CHILD(child)                                \
+                                                                \
+    static const struct zmk_behavior_binding                   \
+        ac_bindings_##child[] = {                              \
+            AC_EVAL(                                            \
+                AC_BINDINGS_,                                   \
+                DT_PROP_LEN(child, bindings)                    \
+            )(child)                                            \
+    };                                                          \
+                                                                \
+    static struct autocomplete_sequence                        \
+        ac_sequence_##child = {                                \
+            .bindings =                                         \
+                ac_bindings_##child,                            \
+                                                                \
+            .binding_len =                                      \
+                ARRAY_SIZE(                                     \
+                    ac_bindings_##child                         \
+                ),                                              \
     };
 
-#define AC_SEQUENCE_INIT(inst, child_idx)                              \
-    {                                                                  \
-        .bindings =                                                    \
-            ac_bindings_##inst##_##child_idx,                          \
-                                                                       \
-        .binding_len =                                                 \
-            ARRAY_SIZE(                                                \
-                ac_bindings_##inst##_##child_idx                       \
-            ),                                                         \
-    }
+DT_FOREACH_CHILD_STATUS_OKAY(
+    DT_DRV_INST(0),
+    AC_DECLARE_CHILD
+)
 
-/* -------------------------------------------------------------------------- */
-/* Instance 0 child declarations                                              */
-/* -------------------------------------------------------------------------- */
+#define AC_SEQUENCE_REF(child) \
+    &ac_sequence_##child
 
-#define AC_INST_CHILD_COUNT(inst) \
-    DT_CHILD_NUM(DT_DRV_INST(inst))
-
-/* child 0 */
-#if AC_INST_CHILD_COUNT(0) > 0
-AC_DECLARE_CHILD(0, 0)
-#endif
-
-#if AC_INST_CHILD_COUNT(0) > 1
-AC_DECLARE_CHILD(0, 1)
-#endif
-
-#if AC_INST_CHILD_COUNT(0) > 2
-AC_DECLARE_CHILD(0, 2)
-#endif
-
-#if AC_INST_CHILD_COUNT(0) > 3
-AC_DECLARE_CHILD(0, 3)
-#endif
-
-#if AC_INST_CHILD_COUNT(0) > 4
-AC_DECLARE_CHILD(0, 4)
-#endif
-
-#if AC_INST_CHILD_COUNT(0) > 5
-AC_DECLARE_CHILD(0, 5)
-#endif
-
-#if AC_INST_CHILD_COUNT(0) > 6
-AC_DECLARE_CHILD(0, 6)
-#endif
-
-#if AC_INST_CHILD_COUNT(0) > 7
-AC_DECLARE_CHILD(0, 7)
-#endif
-
-/* -------------------------------------------------------------------------- */
-/* Sequences                                                                  */
-/* -------------------------------------------------------------------------- */
-
-static struct autocomplete_sequence
-    ac_sequences_0[] = {
-
-#if AC_INST_CHILD_COUNT(0) > 0
-    AC_SEQUENCE_INIT(0, 0),
-#endif
-
-#if AC_INST_CHILD_COUNT(0) > 1
-    AC_SEQUENCE_INIT(0, 1),
-#endif
-
-#if AC_INST_CHILD_COUNT(0) > 2
-    AC_SEQUENCE_INIT(0, 2),
-#endif
-
-#if AC_INST_CHILD_COUNT(0) > 3
-    AC_SEQUENCE_INIT(0, 3),
-#endif
-
-#if AC_INST_CHILD_COUNT(0) > 4
-    AC_SEQUENCE_INIT(0, 4),
-#endif
-
-#if AC_INST_CHILD_COUNT(0) > 5
-    AC_SEQUENCE_INIT(0, 5),
-#endif
-
-#if AC_INST_CHILD_COUNT(0) > 6
-    AC_SEQUENCE_INIT(0, 6),
-#endif
-
-#if AC_INST_CHILD_COUNT(0) > 7
-    AC_SEQUENCE_INIT(0, 7),
-#endif
+static struct autocomplete_sequence *ac_sequences_0[] = {
+    DT_FOREACH_CHILD_STATUS_OKAY_SEP(
+        DT_DRV_INST(0),
+        AC_SEQUENCE_REF,
+        (,)
+    )
 };
 
 /* -------------------------------------------------------------------------- */
@@ -729,7 +656,8 @@ static struct autocomplete_config
         ),
 
     .sequences =
-        ac_sequences_0,
+        (struct autocomplete_sequence *)
+            ac_sequences_0,
 
     .sequence_count =
         ARRAY_SIZE(
