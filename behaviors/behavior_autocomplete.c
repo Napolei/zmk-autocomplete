@@ -542,16 +542,16 @@ autocomplete_driver_api = {
 /* DT Helpers                                                                 */
 /* -------------------------------------------------------------------------- */
 
-#define AC_BINDING_INIT(node_id, prop, idx)            \
+#define AC_BINDING_ENTRY(node_id, idx)                 \
     {                                                  \
         .behavior_dev = DEVICE_DT_NAME(                \
-            DT_PHANDLE_BY_IDX(node_id, prop, idx)      \
+            DT_PHANDLE_BY_IDX(node_id, bindings, idx)  \
         ),                                             \
                                                        \
         .param1 =                                      \
             DT_PHA_BY_IDX_OR(                          \
                 node_id,                               \
-                prop,                                  \
+                bindings,                              \
                 idx,                                   \
                 param1,                                \
                 0                                      \
@@ -560,23 +560,58 @@ autocomplete_driver_api = {
         .param2 =                                      \
             DT_PHA_BY_IDX_OR(                          \
                 node_id,                               \
-                prop,                                  \
+                bindings,                              \
                 idx,                                   \
                 param2,                                \
                 0                                      \
             ),                                         \
     }
 
-#define AC_CHILD_DECL(child)                                           \
-    static const struct zmk_behavior_binding                           \
-        ac_bindings_##child[] = {                                      \
-            LISTIFY(                                                   \
-                DT_PROP_LEN(child, bindings),                          \
-                AC_BINDING_INIT,                                       \
-                (,),                                                   \
-                child,                                                 \
-                bindings                                               \
-            )                                                          \
+#define AC_BINDINGS_1(node_id) \
+    AC_BINDING_ENTRY(node_id, 0)
+
+#define AC_BINDINGS_2(node_id) \
+    AC_BINDINGS_1(node_id),    \
+    AC_BINDING_ENTRY(node_id, 1)
+
+#define AC_BINDINGS_3(node_id) \
+    AC_BINDINGS_2(node_id),    \
+    AC_BINDING_ENTRY(node_id, 2)
+
+#define AC_BINDINGS_4(node_id) \
+    AC_BINDINGS_3(node_id),    \
+    AC_BINDING_ENTRY(node_id, 3)
+
+#define AC_BINDINGS_5(node_id) \
+    AC_BINDINGS_4(node_id),    \
+    AC_BINDING_ENTRY(node_id, 4)
+
+#define AC_BINDINGS_6(node_id) \
+    AC_BINDINGS_5(node_id),    \
+    AC_BINDING_ENTRY(node_id, 5)
+
+#define AC_BINDINGS_7(node_id) \
+    AC_BINDINGS_6(node_id),    \
+    AC_BINDING_ENTRY(node_id, 6)
+
+#define AC_BINDINGS_8(node_id) \
+    AC_BINDINGS_7(node_id),    \
+    AC_BINDING_ENTRY(node_id, 7)
+
+#define AC_BINDINGS_9(node_id) \
+    AC_BINDINGS_8(node_id),    \
+    AC_BINDING_ENTRY(node_id, 8)
+
+#define AC_CAT(a, b) a##b
+#define AC_EXPAND(a, b) AC_CAT(a, b)
+
+#define AC_CHILD_DECL(child)                                   \
+    static const struct zmk_behavior_binding                   \
+        ac_bindings_##child[] = {                              \
+            AC_EXPAND(                                         \
+                AC_BINDINGS_,                                  \
+                DT_PROP_LEN(child, bindings)                   \
+            )(child)                                           \
     };
 
 #define AC_SEQ_INIT(child)                             \
