@@ -1,0 +1,11 @@
+
+.zmk/
+/.idea/inspectionProfiles/profiles_settings.xml
+/.idea/inspectionProfiles/Project_Default.xml
+/.idea/.gitignore
+/.idea/modules.xml
+/.idea/prettier.xml
+/.idea/vcs.xml
+/.idea/zmk-firmwares.iml
+/.idea/zmk-magic-key.iml
+/.idea/**.*

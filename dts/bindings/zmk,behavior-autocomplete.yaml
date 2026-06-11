@@ -1,0 +1,16 @@
+description: Autocomplete behavior
+
+compatible: "zmk,behavior-autocomplete"
+
+include: zero_param.yaml
+
+properties:
+  max-delay-ms:
+    type: int
+    default: 1000
+
+child-binding-properties:
+  properties:
+    sequence:
+      type: array
+      required: true
