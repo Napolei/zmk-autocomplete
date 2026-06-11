@@ -8,10 +8,3 @@ properties:
   max-delay-ms:
     type: int
     default: 1000
-
-child-binding-properties:
-  properties:
-    bindings:
-      type: phandle-array
-      required: true
-
