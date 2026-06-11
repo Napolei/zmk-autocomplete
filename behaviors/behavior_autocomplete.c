@@ -542,6 +542,11 @@ autocomplete_driver_api = {
 /* DT Helpers                                                                 */
 /* -------------------------------------------------------------------------- */
 
+#define AC_NODE(n) DT_DRV_INST(n)
+
+#define AC_CHILD(node_id, idx) \
+    DT_CHILD_BY_IDX(node_id, idx)
+
 #define AC_BINDING_ENTRY(node_id, idx)                 \
     {                                                  \
         .behavior_dev = DEVICE_DT_NAME(                \
@@ -602,79 +607,150 @@ autocomplete_driver_api = {
     AC_BINDINGS_8(node_id),    \
     AC_BINDING_ENTRY(node_id, 8)
 
-#define AC_CAT(a, b) a##b
-#define AC_EXPAND(a, b) AC_CAT(a, b)
+#define AC_SELECT_BINDINGS(count) \
+    AC_BINDINGS_##count
 
-#define AC_CHILD_DECL(child)                                   \
-    static const struct zmk_behavior_binding                   \
-        ac_bindings_##child[] = {                              \
-            AC_EXPAND(                                         \
-                AC_BINDINGS_,                                  \
-                DT_PROP_LEN(child, bindings)                   \
-            )(child)                                           \
+#define AC_DECLARE_CHILD(inst, child_idx)                              \
+                                                                        \
+    static const struct zmk_behavior_binding                           \
+        ac_bindings_##inst##_##child_idx[] = {                         \
+            AC_SELECT_BINDINGS(                                        \
+                DT_PROP_LEN(                                           \
+                    AC_CHILD(AC_NODE(inst), child_idx),                \
+                    bindings                                           \
+                )                                                      \
+            )(                                                         \
+                AC_CHILD(AC_NODE(inst), child_idx)                     \
+            )                                                          \
     };
 
-#define AC_SEQ_INIT(child)                             \
-    {                                                  \
-        .bindings =                                    \
-            ac_bindings_##child,                       \
-                                                       \
-        .binding_len =                                 \
-            ARRAY_SIZE(                                \
-                ac_bindings_##child                    \
-            ),                                         \
-    },
+#define AC_SEQUENCE_INIT(inst, child_idx)                              \
+    {                                                                  \
+        .bindings =                                                    \
+            ac_bindings_##inst##_##child_idx,                          \
+                                                                       \
+        .binding_len =                                                 \
+            ARRAY_SIZE(                                                \
+                ac_bindings_##inst##_##child_idx                       \
+            ),                                                         \
+    }
 
 /* -------------------------------------------------------------------------- */
-/* Instantiation                                                              */
+/* Instance 0 child declarations                                              */
 /* -------------------------------------------------------------------------- */
 
-#define AUTOCOMPLETE_INST(n)                           \
-                                                       \
-    DT_FOREACH_CHILD(                                  \
-        DT_DRV_INST(n),                                \
-        AC_CHILD_DECL                                  \
-    )                                                  \
-                                                       \
-    static struct autocomplete_sequence                \
-        ac_sequences_##n[] = {                         \
-            DT_FOREACH_CHILD(                          \
-                DT_DRV_INST(n),                        \
-                AC_SEQ_INIT                            \
-            )                                          \
-    };                                                 \
-                                                       \
-    static struct autocomplete_config                  \
-        ac_cfg_##n = {                                 \
-            .max_delay_ms =                            \
-                DT_INST_PROP(                          \
-                    n,                                 \
-                    max_delay_ms                       \
-                ),                                     \
-                                                       \
-            .sequences =                               \
-                ac_sequences_##n,                      \
-                                                       \
-            .sequence_count =                          \
-                ARRAY_SIZE(                            \
-                    ac_sequences_##n                   \
-                ),                                     \
-    };                                                 \
-                                                       \
-    static struct autocomplete_data                    \
-        ac_data_##n;                                   \
-                                                       \
-    BEHAVIOR_DT_INST_DEFINE(                           \
-        n,                                             \
-        autocomplete_init,                             \
-        NULL,                                          \
-        &ac_data_##n,                                  \
-        &ac_cfg_##n,                                   \
-        APPLICATION,                                   \
-        CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,           \
-        &autocomplete_driver_api                       \
-    );
+#define AC_INST_CHILD_COUNT(inst) \
+    DT_CHILD_NUM(DT_DRV_INST(inst))
 
-DT_INST_FOREACH_STATUS_OKAY(
-    AUTOCOMPLETE_INST
-)
+/* child 0 */
+#if AC_INST_CHILD_COUNT(0) > 0
+AC_DECLARE_CHILD(0, 0)
+#endif
+
+#if AC_INST_CHILD_COUNT(0) > 1
+AC_DECLARE_CHILD(0, 1)
+#endif
+
+#if AC_INST_CHILD_COUNT(0) > 2
+AC_DECLARE_CHILD(0, 2)
+#endif
+
+#if AC_INST_CHILD_COUNT(0) > 3
+AC_DECLARE_CHILD(0, 3)
+#endif
+
+#if AC_INST_CHILD_COUNT(0) > 4
+AC_DECLARE_CHILD(0, 4)
+#endif
+
+#if AC_INST_CHILD_COUNT(0) > 5
+AC_DECLARE_CHILD(0, 5)
+#endif
+
+#if AC_INST_CHILD_COUNT(0) > 6
+AC_DECLARE_CHILD(0, 6)
+#endif
+
+#if AC_INST_CHILD_COUNT(0) > 7
+AC_DECLARE_CHILD(0, 7)
+#endif
+
+/* -------------------------------------------------------------------------- */
+/* Sequences                                                                  */
+/* -------------------------------------------------------------------------- */
+
+static struct autocomplete_sequence
+    ac_sequences_0[] = {
+
+#if AC_INST_CHILD_COUNT(0) > 0
+    AC_SEQUENCE_INIT(0, 0),
+#endif
+
+#if AC_INST_CHILD_COUNT(0) > 1
+    AC_SEQUENCE_INIT(0, 1),
+#endif
+
+#if AC_INST_CHILD_COUNT(0) > 2
+    AC_SEQUENCE_INIT(0, 2),
+#endif
+
+#if AC_INST_CHILD_COUNT(0) > 3
+    AC_SEQUENCE_INIT(0, 3),
+#endif
+
+#if AC_INST_CHILD_COUNT(0) > 4
+    AC_SEQUENCE_INIT(0, 4),
+#endif
+
+#if AC_INST_CHILD_COUNT(0) > 5
+    AC_SEQUENCE_INIT(0, 5),
+#endif
+
+#if AC_INST_CHILD_COUNT(0) > 6
+    AC_SEQUENCE_INIT(0, 6),
+#endif
+
+#if AC_INST_CHILD_COUNT(0) > 7
+    AC_SEQUENCE_INIT(0, 7),
+#endif
+};
+
+/* -------------------------------------------------------------------------- */
+/* Config                                                                     */
+/* -------------------------------------------------------------------------- */
+
+static struct autocomplete_config
+    ac_cfg_0 = {
+
+    .max_delay_ms =
+        DT_INST_PROP(
+            0,
+            max_delay_ms
+        ),
+
+    .sequences =
+        ac_sequences_0,
+
+    .sequence_count =
+        ARRAY_SIZE(
+            ac_sequences_0
+        ),
+};
+
+static struct autocomplete_data
+    ac_data_0;
+
+/* -------------------------------------------------------------------------- */
+/* Device                                                                     */
+/* -------------------------------------------------------------------------- */
+
+BEHAVIOR_DT_INST_DEFINE(
+    0,
+    autocomplete_init,
+    NULL,
+    &ac_data_0,
+    &ac_cfg_0,
+    APPLICATION,
+    CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,
+    &autocomplete_driver_api
+);
