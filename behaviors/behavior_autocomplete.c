@@ -542,14 +542,10 @@ autocomplete_driver_api = {
 /* DT Helpers                                                                 */
 /* -------------------------------------------------------------------------- */
 
-#define AUTOCOMPLETE_BINDING_ENTRY(node_id, prop, idx) \
+#define AC_BINDING_INIT(node_id, prop, idx)            \
     {                                                  \
         .behavior_dev = DEVICE_DT_NAME(                \
-            DT_PHANDLE_BY_IDX(                         \
-                node_id,                               \
-                prop,                                  \
-                idx                                    \
-            )                                          \
+            DT_PHANDLE_BY_IDX(node_id, prop, idx)      \
         ),                                             \
                                                        \
         .param1 =                                      \
@@ -569,17 +565,18 @@ autocomplete_driver_api = {
                 param2,                                \
                 0                                      \
             ),                                         \
-    },
+    }
 
-#define AC_CHILD_DECL(child)                           \
-    static const                                       \
-        struct zmk_behavior_binding                    \
-        ac_bindings_##child[] = {                      \
-            DT_FOREACH_PROP_ELEM(                      \
-                child,                                 \
-                bindings,                              \
-                AUTOCOMPLETE_BINDING_ENTRY             \
-            )                                          \
+#define AC_CHILD_DECL(child)                                           \
+    static const struct zmk_behavior_binding                           \
+        ac_bindings_##child[] = {                                      \
+            LISTIFY(                                                   \
+                DT_PROP_LEN(child, bindings),                          \
+                AC_BINDING_INIT,                                       \
+                (,),                                                   \
+                child,                                                 \
+                bindings                                               \
+            )                                                          \
     };
 
 #define AC_SEQ_INIT(child)                             \
@@ -606,7 +603,6 @@ autocomplete_driver_api = {
                                                        \
     static struct autocomplete_sequence                \
         ac_sequences_##n[] = {                         \
-                                                       \
             DT_FOREACH_CHILD(                          \
                 DT_DRV_INST(n),                        \
                 AC_SEQ_INIT                            \
@@ -615,7 +611,6 @@ autocomplete_driver_api = {
                                                        \
     static struct autocomplete_config                  \
         ac_cfg_##n = {                                 \
-                                                       \
             .max_delay_ms =                            \
                 DT_INST_PROP(                          \
                     n,                                 \
