@@ -8,3 +8,6 @@ properties:
   max-delay-ms:
     type: int
     default: 1000
+
+#binding-cells:
+  const: 0
