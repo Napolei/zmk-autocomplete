@@ -278,7 +278,7 @@ static int collect_matches(
              i++) {
 
             struct autocomplete_sequence *seq =
-                &cfg->sequences[i];
+                cfg->sequences[i];
 
             if (sequence_matches(
                     seq,
@@ -443,7 +443,7 @@ static int autocomplete_init(
          i++) {
 
         struct autocomplete_sequence *seq =
-            &cfg->sequences[i];
+            cfg->sequences[i];
 
         for (uint8_t j = 0;
              j < seq->binding_len;
