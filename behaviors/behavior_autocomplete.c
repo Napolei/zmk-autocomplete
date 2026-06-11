@@ -567,118 +567,22 @@ autocomplete_driver_api = {
             ),                                         \
     }
 
-#define AC_BINDINGS_1(node_id) \
-    AC_BINDING_ENTRY(node_id, 0)
-
-#define AC_BINDINGS_2(node_id) \
-    AC_BINDINGS_1(node_id),    \
-    AC_BINDING_ENTRY(node_id, 1)
-
-#define AC_BINDINGS_3(node_id) \
-    AC_BINDINGS_2(node_id),    \
-    AC_BINDING_ENTRY(node_id, 2)
-
-#define AC_BINDINGS_4(node_id) \
-    AC_BINDINGS_3(node_id),    \
-    AC_BINDING_ENTRY(node_id, 3)
-
-#define AC_BINDINGS_5(node_id) \
-    AC_BINDINGS_4(node_id),    \
-    AC_BINDING_ENTRY(node_id, 4)
-
-#define AC_BINDINGS_6(node_id) \
-    AC_BINDINGS_5(node_id),    \
-    AC_BINDING_ENTRY(node_id, 5)
-
-#define AC_BINDINGS_7(node_id) \
-    AC_BINDINGS_6(node_id),    \
-    AC_BINDING_ENTRY(node_id, 6)
-
-#define AC_BINDINGS_8(node_id) \
-    AC_BINDINGS_7(node_id),    \
-    AC_BINDING_ENTRY(node_id, 7)
-
-#define AC_BINDINGS_9(node_id) \
-    AC_BINDINGS_8(node_id),    \
-    AC_BINDING_ENTRY(node_id, 8)
-
-#define AC_CAT(a, b) a##b
-#define AC_EVAL(a, b) AC_CAT(a, b)
-
 #define AC_DECLARE_CHILD(child)                                \
-                                                                \
     static const struct zmk_behavior_binding                   \
         ac_bindings_##child[] = {                              \
-            AC_EVAL(                                            \
-                AC_BINDINGS_,                                   \
-                DT_PROP_LEN(child, bindings)                    \
-            )(child)                                            \
-    };                                                          \
-                                                                \
+            DT_FOREACH_PROP_ELEM(child, bindings, AC_BINDING_ENTRY) \
+    };                                                         \
+                                                               \
     static struct autocomplete_sequence                        \
         ac_sequence_##child = {                                \
             .bindings =                                         \
                 ac_bindings_##child,                            \
-                                                                \
+                                                               \
             .binding_len =                                      \
-                ARRAY_SIZE(                                     \
-                    ac_bindings_##child                         \
-                ),                                              \
+                DT_PROP_LEN(child, bindings),                   \
     };
 
 DT_FOREACH_CHILD_STATUS_OKAY(
     DT_DRV_INST(0),
     AC_DECLARE_CHILD
 )
-
-#define AC_SEQUENCE_REF(child) \
-    &ac_sequence_##child
-
-static struct autocomplete_sequence *ac_sequences_0[] = {
-    DT_FOREACH_CHILD_STATUS_OKAY_SEP(
-        DT_DRV_INST(0),
-        AC_SEQUENCE_REF,
-        (,)
-    )
-};
-
-/* -------------------------------------------------------------------------- */
-/* Config                                                                     */
-/* -------------------------------------------------------------------------- */
-
-static struct autocomplete_config
-    ac_cfg_0 = {
-
-    .max_delay_ms =
-        DT_INST_PROP(
-            0,
-            max_delay_ms
-        ),
-
-    .sequences =
-        (struct autocomplete_sequence *)
-            ac_sequences_0,
-
-    .sequence_count =
-        ARRAY_SIZE(
-            ac_sequences_0
-        ),
-};
-
-static struct autocomplete_data
-    ac_data_0;
-
-/* -------------------------------------------------------------------------- */
-/* Device                                                                     */
-/* -------------------------------------------------------------------------- */
-
-BEHAVIOR_DT_INST_DEFINE(
-    0,
-    autocomplete_init,
-    NULL,
-    &ac_data_0,
-    &ac_cfg_0,
-    APPLICATION,
-    CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,
-    &autocomplete_driver_api
-);
