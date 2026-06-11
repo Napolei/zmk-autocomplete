@@ -9,5 +9,6 @@ properties:
     type: int
     default: 1000
 
-#binding-cells:
+"#binding-cells":
   const: 0
+
