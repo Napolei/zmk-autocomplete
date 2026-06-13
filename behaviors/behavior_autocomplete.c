@@ -82,6 +82,27 @@ static bool is_modifier_keycode(uint32_t keycode) {
          keycode <= HID_USAGE_KEY_KEYBOARD_RIGHT_GUI);
 }
 
+static bool is_backspace(uint32_t keycode) {
+    return keycode == HID_USAGE_KEY_KEYBOARD_BACKSPACE;
+}
+
+static bool is_delete(uint32_t keycode) {
+    return keycode == HID_USAGE_KEY_KEYBOARD_DELETE;
+}
+
+static void history_pop(struct autocomplete_data *data) {
+    if (data->count == 0) {
+        return;
+    }
+
+    // move head backwards
+    data->head =
+        (data->head + AUTOCOMPLETE_HISTORY_SIZE - 1)
+        % AUTOCOMPLETE_HISTORY_SIZE;
+
+    data->count--;
+}
+
 static void history_push(
     struct autocomplete_data *data,
     uint32_t encoded
@@ -321,9 +342,8 @@ DT_INST_FOREACH_STATUS_OKAY(
     AUTOCOMPLETE_DECLARE
 )
 
-static int autocomplete_keycode_listener(
-    const zmk_event_t *eh
-) {
+static int autocomplete_keycode_listener(const zmk_event_t *eh)
+{
     const struct zmk_keycode_state_changed *ev =
         as_zmk_keycode_state_changed(eh);
 
@@ -339,26 +359,48 @@ static int autocomplete_keycode_listener(
         return ZMK_EV_EVENT_BUBBLE;
     }
 
-    if (is_modifier_keycode(ev->keycode)) {
+    uint32_t keycode = ev->keycode;
+
+    // ignore modifiers entirely
+    if (is_modifier_keycode(keycode)) {
         return ZMK_EV_EVENT_BUBBLE;
     }
 
     uint32_t encoded =
         encoded_from_event(ev);
 
-#define AUTOCOMPLETE_PUSH(n)                              \
-    if (!autocomplete_data_##n.firing ||                  \
-        autocomplete_data_##n.capturing) {                \
-                                                          \
-        history_push(                                     \
-            &autocomplete_data_##n,                       \
-            encoded                                       \
-        );                                                \
+    /* ----------------------------
+     * BACKSPACE / DELETE handling
+     * ---------------------------- */
+    if (is_backspace(keycode) || is_delete(keycode)) {
+
+#define AUTOCOMPLETE_POP(n) \
+        do { \
+            if (!autocomplete_data_##n.firing) { \
+                history_pop(&autocomplete_data_##n); \
+            } \
+        } while (0)
+
+        DT_INST_FOREACH_STATUS_OKAY(AUTOCOMPLETE_POP);
+
+#undef AUTOCOMPLETE_POP
+
+        return ZMK_EV_EVENT_BUBBLE;
     }
 
-    DT_INST_FOREACH_STATUS_OKAY(
-        AUTOCOMPLETE_PUSH
-    )
+    /* ----------------------------
+     * NORMAL CHARACTER INPUT
+     * ---------------------------- */
+
+#define AUTOCOMPLETE_PUSH(n) \
+        do { \
+            if (!autocomplete_data_##n.firing || \
+                autocomplete_data_##n.capturing) { \
+                history_push(&autocomplete_data_##n, encoded); \
+            } \
+        } while (0)
+
+    DT_INST_FOREACH_STATUS_OKAY(AUTOCOMPLETE_PUSH);
 
 #undef AUTOCOMPLETE_PUSH
 
