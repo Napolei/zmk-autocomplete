@@ -82,12 +82,14 @@ static bool is_modifier_keycode(uint32_t keycode) {
          keycode <= HID_USAGE_KEY_KEYBOARD_RIGHT_GUI);
 }
 
-static bool is_backspace(uint32_t keycode) {
-    return keycode == HID_USAGE_KEY_KEYBOARD_BACKSPACE;
+static bool is_backspace(uint32_t keycode)
+{
+    return keycode == HID_USAGE_KEY_KEYBOARD_DELETE_OR_BACKSPACE;
 }
 
-static bool is_delete(uint32_t keycode) {
-    return keycode == HID_USAGE_KEY_KEYBOARD_DELETE;
+static bool is_delete(uint32_t keycode)
+{
+    return keycode == HID_USAGE_KEY_KEYBOARD_DELETE_FORWARD;
 }
 
 static void history_pop(struct autocomplete_data *data) {
