@@ -623,8 +623,6 @@ static int autocomplete_init(
                 ),                                     \
     };                                                 \
                                                        \
-    static struct autocomplete_data                    \
-        autocomplete_data_##n;                         \
                                                        \
     BEHAVIOR_DT_INST_DEFINE(                           \
         n,                                             \
@@ -639,4 +637,4 @@ static int autocomplete_init(
 
 DT_INST_FOREACH_STATUS_OKAY(
     AUTOCOMPLETE_INST
-)
+);
