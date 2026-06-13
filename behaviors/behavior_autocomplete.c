@@ -347,16 +347,14 @@ static int autocomplete_keycode_listener(
         encoded_from_event(ev);
 
 #define AUTOCOMPLETE_PUSH(n)                              \
-    do {                                                  \
-        if (!autocomplete_data_##n.firing ||              \
-            autocomplete_data_##n.capturing) {            \
+    if (!autocomplete_data_##n.firing ||                  \
+        autocomplete_data_##n.capturing) {                \
                                                           \
-            history_push(                                 \
-                &autocomplete_data_##n,                   \
-                encoded                                   \
-            );                                            \
-        }                                                 \
-    } while (0)
+        history_push(                                     \
+            &autocomplete_data_##n,                       \
+            encoded                                       \
+        );                                                \
+    }
 
     DT_INST_FOREACH_STATUS_OKAY(
         AUTOCOMPLETE_PUSH
