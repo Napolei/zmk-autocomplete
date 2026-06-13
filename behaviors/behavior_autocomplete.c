@@ -84,7 +84,7 @@ static bool is_modifier_keycode(uint32_t keycode) {
 
 static bool is_backspace(uint32_t keycode)
 {
-    return keycode == HID_USAGE_KEY_KEYBOARD_DELETE_OR_BACKSPACE;
+    return keycode == HID_USAGE_KEY_KEYBOARD_DELETE_BACKSPACE;
 }
 
 static bool is_delete(uint32_t keycode)
