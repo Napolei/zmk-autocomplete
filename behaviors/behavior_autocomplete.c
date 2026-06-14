@@ -4,6 +4,7 @@
 
 #include <zephyr/device.h>
 #include <zephyr/kernel.h>
+#include <zephyr/devicetree.h>
 #include <zephyr/logging/log.h>
 
 #include <drivers/behavior.h>
@@ -13,6 +14,7 @@
 #include <zmk/events/keycode_state_changed.h>
 #include <zmk/hid.h>
 #include <zmk/keymap.h>
+#include <zmk/behaviors/key_press.h>
 
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
@@ -260,30 +262,28 @@ static int emit_keycode(
     struct zmk_behavior_binding_event event
 ) {
     struct zmk_behavior_binding binding = {
-        .behavior_dev = "KEY_PRESS",
+        .behavior_dev = DT_LABEL(DT_NODELABEL(key_press)),
         .param1 = usage,
         .param2 = 0,
     };
 
     int ret;
 
-    ret =
-        zmk_behavior_invoke_binding(
-            &binding,
-            event,
-            true
-        );
+    ret = zmk_behavior_invoke_binding(
+        &binding,
+        event,
+        true
+    );
 
     if (ret < 0) {
         return ret;
     }
 
-    return
-        zmk_behavior_invoke_binding(
-            &binding,
-            event,
-            false
-        );
+    return zmk_behavior_invoke_binding(
+        &binding,
+        event,
+        false
+    );
 }
 
 static int emit_continuation(
