@@ -18,6 +18,8 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #define AUTOCOMPLETE_HISTORY_SIZE CONFIG_ZMK_AUTOCOMPLETE_HISTORY_SIZE
 
 /* -------------------------------------------------------------------------- */
+/* DATA STRUCTURES                                                            */
+/* -------------------------------------------------------------------------- */
 
 struct autocomplete_sequence {
     const uint32_t *bindings;
@@ -44,6 +46,8 @@ struct autocomplete_data {
 };
 
 /* -------------------------------------------------------------------------- */
+/* SEMANTIC ENCODING                                                         */
+/* -------------------------------------------------------------------------- */
 
 static inline uint32_t encode_semantic(uint8_t mods, uint16_t usage_page, uint16_t keycode) {
     return ((uint32_t)mods << 24) | ((uint32_t)usage_page << 16) | keycode;
@@ -58,6 +62,8 @@ static inline uint32_t binding_to_semantic(uint32_t keycode) {
     return encode_semantic(0, HID_USAGE_KEY, keycode);
 }
 
+/* -------------------------------------------------------------------------- */
+/* HISTORY                                                                    */
 /* -------------------------------------------------------------------------- */
 
 static void history_push(struct autocomplete_data *d, uint32_t v) {
@@ -97,6 +103,8 @@ static bool history_suffix(const struct autocomplete_data *d,
 }
 
 /* -------------------------------------------------------------------------- */
+/* MATCHING                                                                   */
+/* -------------------------------------------------------------------------- */
 
 static bool seq_matches(const struct autocomplete_sequence *seq,
                         const uint32_t *hist,
@@ -107,7 +115,7 @@ static bool seq_matches(const struct autocomplete_sequence *seq,
 }
 
 /* -------------------------------------------------------------------------- */
-/* INIT                                                                      */
+/* INIT                                                                       */
 /* -------------------------------------------------------------------------- */
 
 static int autocomplete_init(const struct device *dev) {
@@ -126,10 +134,17 @@ static int autocomplete_init(const struct device *dev) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* LISTENER                                                                  */
+/* PER INSTANCE DATA                                                          */
 /* -------------------------------------------------------------------------- */
 
-static struct autocomplete_data data_instance;
+#define AUTOCOMPLETE_DATA(n) \
+    static struct autocomplete_data autocomplete_data_##n;
+
+/* -------------------------------------------------------------------------- */
+/* LISTENER                                                                   */
+/* -------------------------------------------------------------------------- */
+
+static struct autocomplete_data *active_data;
 
 static int listener(const zmk_event_t *eh) {
     const struct zmk_keycode_state_changed *ev =
@@ -141,28 +156,23 @@ static int listener(const zmk_event_t *eh) {
     uint32_t keycode = ev->keycode;
     uint32_t encoded = encoded_from_event(ev);
 
-    /* ------------------------------------------------------ */
-    /* FIX 1: backspace/delete MUST mutate history immediately */
-    /* ------------------------------------------------------ */
-    if (keycode == HID_USAGE_KEY_KEYBOARD_DELETE_BACKSPACE ||
-        keycode == HID_USAGE_KEY_KEYBOARD_DELETE_FORWARD) {
-
-        if (!data_instance.firing) {
-            history_pop(&data_instance);
-        }
-
+    if (!active_data || active_data->firing) {
         return ZMK_EV_EVENT_BUBBLE;
     }
 
-    /* ignore modifiers */
+    if (keycode == HID_USAGE_KEY_KEYBOARD_DELETE_BACKSPACE ||
+        keycode == HID_USAGE_KEY_KEYBOARD_DELETE_FORWARD) {
+
+        history_pop(active_data);
+        return ZMK_EV_EVENT_BUBBLE;
+    }
+
     if (keycode >= HID_USAGE_KEY_KEYBOARD_LEFTCONTROL &&
         keycode <= HID_USAGE_KEY_KEYBOARD_RIGHT_GUI) {
         return ZMK_EV_EVENT_BUBBLE;
     }
 
-    if (!data_instance.firing) {
-        history_push(&data_instance, encoded);
-    }
+    history_push(active_data, encoded);
 
     return ZMK_EV_EVENT_BUBBLE;
 }
@@ -171,23 +181,20 @@ ZMK_LISTENER(autocomplete, listener);
 ZMK_SUBSCRIPTION(autocomplete, zmk_keycode_state_changed);
 
 /* -------------------------------------------------------------------------- */
-/* EMISSION FIX                                                              */
+/* EMIT (IMPORTANT FIX)                                                       */
 /* -------------------------------------------------------------------------- */
 
-static int emit_binding(
-    const struct zmk_behavior_binding *b,
-    struct zmk_behavior_binding_event event
-) {
-    int ret;
+static int emit_binding(const struct zmk_behavior_binding *b,
+                        struct zmk_behavior_binding_event event) {
 
-    ret = zmk_behavior_invoke_binding(b, event, true);
+    int ret = zmk_behavior_invoke_binding(b, event, true);
     if (ret < 0) return ret;
 
     return zmk_behavior_invoke_binding(b, event, false);
 }
 
 /* -------------------------------------------------------------------------- */
-/* BEHAVIOR                                                                  */
+/* BEHAVIOR CALLBACKS                                                         */
 /* -------------------------------------------------------------------------- */
 
 static int binding_pressed(struct zmk_behavior_binding *b,
@@ -200,7 +207,9 @@ static int binding_released(struct zmk_behavior_binding *b,
 
     const struct device *dev = device_get_binding(b->behavior_dev);
     const struct autocomplete_config *cfg = dev->config;
+
     struct autocomplete_data *d = dev->data;
+    active_data = d;
 
     const struct autocomplete_sequence *matches[16];
     uint32_t buf[AUTOCOMPLETE_HISTORY_SIZE];
@@ -208,7 +217,6 @@ static int binding_released(struct zmk_behavior_binding *b,
     int match_count = 0;
     int best_len = 0;
 
-    /* find longest suffix match */
     for (int len = d->count; len >= 1; len--) {
 
         if (!history_suffix(d, len, buf)) continue;
@@ -232,7 +240,6 @@ static int binding_released(struct zmk_behavior_binding *b,
 
     if (match_count == 0) return 0;
 
-    /* compute shared continuation */
     int continuation = 0;
 
     while (1) {
@@ -276,6 +283,8 @@ done:
 }
 
 /* -------------------------------------------------------------------------- */
+/* DRIVER API                                                                */
+/* -------------------------------------------------------------------------- */
 
 static const struct behavior_driver_api api = {
     .binding_pressed = binding_pressed,
@@ -283,7 +292,7 @@ static const struct behavior_driver_api api = {
 };
 
 /* -------------------------------------------------------------------------- */
-/* DT wiring                                                                 */
+/* DT WIRING                                                                  */
 /* -------------------------------------------------------------------------- */
 
 #define AUTOCOMPLETE_CHILD(child) \
@@ -303,7 +312,7 @@ static const struct behavior_driver_api api = {
         .sequence_count = ARRAY_SIZE(seqs_##n),                     \
     };                                                              \
     BEHAVIOR_DT_INST_DEFINE(n, autocomplete_init, NULL,             \
-        &data_instance, &cfg_##n, APPLICATION,                      \
+        &autocomplete_data_##n, &cfg_##n, APPLICATION,              \
         CONFIG_KERNEL_INIT_PRIORITY_DEFAULT, &api);
 
 DT_INST_FOREACH_STATUS_OKAY(AUTOCOMPLETE_INST);
