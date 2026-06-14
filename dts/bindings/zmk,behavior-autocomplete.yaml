@@ -12,6 +12,5 @@ properties:
 child-binding:
   properties:
     bindings:
-      type: phandle-array
+      type: array
       required: true
-      specifier-space: binding

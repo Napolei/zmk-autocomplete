@@ -1,10 +1,8 @@
-
 #define DT_DRV_COMPAT zmk_behavior_autocomplete
 
 #include <string.h>
 
 #include <zephyr/device.h>
-#include <zephyr/init.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
@@ -21,26 +19,24 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #define AUTOCOMPLETE_HISTORY_SIZE \
     CONFIG_ZMK_AUTOCOMPLETE_HISTORY_SIZE
 
-#define AUTOCOMPLETE_MAX_SEQUENCE_LEN 64
-#define AUTOCOMPLETE_MAX_MATCHES      32
+#define AUTOCOMPLETE_MAX_MATCHES 32
 
 struct autocomplete_sequence {
-    uint32_t semantic[AUTOCOMPLETE_MAX_SEQUENCE_LEN];
-    uint8_t semantic_len;
-
-    const struct zmk_behavior_binding *bindings;
+    const uint32_t *bindings;
     uint8_t binding_len;
 };
 
 struct autocomplete_config {
     int32_t max_delay_ms;
 
-    struct autocomplete_sequence *sequences;
+    const struct autocomplete_sequence *sequences;
     uint8_t sequence_count;
 };
 
 struct autocomplete_data {
-    uint32_t history[AUTOCOMPLETE_HISTORY_SIZE];
+    uint32_t history[
+        AUTOCOMPLETE_HISTORY_SIZE
+    ];
 
     uint8_t head;
     uint8_t count;
@@ -76,33 +72,30 @@ static inline uint32_t encoded_from_event(
     );
 }
 
-static bool is_modifier_keycode(uint32_t keycode) {
+static bool is_modifier_keycode(
+    uint32_t keycode
+) {
     return
-        (keycode >= HID_USAGE_KEY_KEYBOARD_LEFTCONTROL &&
-         keycode <= HID_USAGE_KEY_KEYBOARD_RIGHT_GUI);
+        (keycode >=
+            HID_USAGE_KEY_KEYBOARD_LEFTCONTROL &&
+         keycode <=
+            HID_USAGE_KEY_KEYBOARD_RIGHT_GUI);
 }
 
-static bool is_backspace(uint32_t keycode)
-{
-    return keycode == HID_USAGE_KEY_KEYBOARD_DELETE_BACKSPACE;
+static bool is_backspace(
+    uint32_t keycode
+) {
+    return
+        keycode ==
+            HID_USAGE_KEY_KEYBOARD_DELETE_BACKSPACE;
 }
 
-static bool is_delete(uint32_t keycode)
-{
-    return keycode == HID_USAGE_KEY_KEYBOARD_DELETE_FORWARD;
-}
-
-static void history_pop(struct autocomplete_data *data) {
-    if (data->count == 0) {
-        return;
-    }
-
-    // move head backwards
-    data->head =
-        (data->head + AUTOCOMPLETE_HISTORY_SIZE - 1)
-        % AUTOCOMPLETE_HISTORY_SIZE;
-
-    data->count--;
+static bool is_delete(
+    uint32_t keycode
+) {
+    return
+        keycode ==
+            HID_USAGE_KEY_KEYBOARD_DELETE_FORWARD;
 }
 
 static void history_push(
@@ -123,6 +116,22 @@ static void history_push(
 
     data->last_press_time =
         k_uptime_get();
+}
+
+static void history_pop(
+    struct autocomplete_data *data
+) {
+    if (data->count == 0) {
+        return;
+    }
+
+    data->head =
+        (data->head +
+         AUTOCOMPLETE_HISTORY_SIZE -
+         1) %
+        AUTOCOMPLETE_HISTORY_SIZE;
+
+    data->count--;
 }
 
 static bool history_suffix(
@@ -159,19 +168,24 @@ static bool sequence_matches(
     const uint32_t *history,
     uint8_t history_len
 ) {
-    if (history_len > seq->semantic_len) {
+    if (history_len >
+        seq->binding_len) {
+
         return false;
     }
 
     return memcmp(
         history,
-        seq->semantic,
-        history_len * sizeof(uint32_t)
+        seq->bindings,
+        history_len *
+            sizeof(uint32_t)
     ) == 0;
 }
 
-static uint8_t longest_shared_continuation(
-    const struct autocomplete_sequence **matches,
+static uint8_t
+longest_shared_continuation(
+    const struct autocomplete_sequence
+        **matches,
     uint8_t match_count,
     uint8_t prefix_len
 ) {
@@ -190,25 +204,31 @@ static uint8_t longest_shared_continuation(
              i < match_count;
              i++) {
 
-            const struct autocomplete_sequence *seq =
-                matches[i];
+            const struct
+                autocomplete_sequence *seq =
+                    matches[i];
 
             uint8_t pos =
-                prefix_len + continuation;
+                prefix_len +
+                continuation;
 
-            if (pos >= seq->semantic_len) {
+            if (pos >=
+                seq->binding_len) {
+
                 return continuation;
             }
 
             uint32_t value =
-                seq->semantic[pos];
+                seq->bindings[pos];
 
             if (first) {
 
                 expected = value;
                 first = false;
 
-            } else if (value != expected) {
+            } else if (
+                value != expected
+            ) {
 
                 return continuation;
             }
@@ -218,34 +238,53 @@ static uint8_t longest_shared_continuation(
     }
 }
 
+static int emit_keycode(
+    uint32_t usage,
+    struct zmk_behavior_binding_event event
+) {
+    struct zmk_behavior_binding binding = {
+        .behavior_dev = "KEY_PRESS",
+        .param1 = usage,
+        .param2 = 0,
+    };
+
+    int ret;
+
+    ret =
+        zmk_behavior_invoke_binding(
+            &binding,
+            event,
+            true
+        );
+
+    if (ret < 0) {
+        return ret;
+    }
+
+    return
+        zmk_behavior_invoke_binding(
+            &binding,
+            event,
+            false
+        );
+}
+
 static int emit_continuation(
     const struct autocomplete_sequence *seq,
     uint8_t start,
     uint8_t len,
     struct zmk_behavior_binding_event event
 ) {
-    int ret = 0;
+    int ret;
 
     for (uint8_t i = start;
          i < start + len;
          i++) {
 
         ret =
-            zmk_behavior_invoke_binding(
-                &seq->bindings[i],
-                event,
-                true
-            );
-
-        if (ret < 0) {
-            return ret;
-        }
-
-        ret =
-            zmk_behavior_invoke_binding(
-                &seq->bindings[i],
-                event,
-                false
+            emit_keycode(
+                seq->bindings[i],
+                event
             );
 
         if (ret < 0) {
@@ -253,17 +292,19 @@ static int emit_continuation(
         }
     }
 
-    return ret;
+    return 0;
 }
 
 static int find_matches(
     const struct autocomplete_config *cfg,
     struct autocomplete_data *data,
-    const struct autocomplete_sequence **matches,
+    const struct autocomplete_sequence
+        **matches,
     uint8_t *out_match_count,
     uint8_t *out_prefix_len
 ) {
-    int64_t now = k_uptime_get();
+    int64_t now =
+        k_uptime_get();
 
     if (cfg->max_delay_ms > 0 &&
         (now - data->last_press_time) >
@@ -298,8 +339,9 @@ static int find_matches(
              i < cfg->sequence_count;
              i++) {
 
-            struct autocomplete_sequence *seq =
-                &cfg->sequences[i];
+            const struct
+                autocomplete_sequence *seq =
+                    &cfg->sequences[i];
 
             if (sequence_matches(
                     seq,
@@ -327,8 +369,11 @@ static int find_matches(
         return -ENOENT;
     }
 
-    *out_match_count = best_match_count;
-    *out_prefix_len = best_prefix;
+    *out_match_count =
+        best_match_count;
+
+    *out_prefix_len =
+        best_prefix;
 
     return 0;
 }
@@ -344,10 +389,14 @@ DT_INST_FOREACH_STATUS_OKAY(
     AUTOCOMPLETE_DECLARE
 )
 
-static int autocomplete_keycode_listener(const zmk_event_t *eh)
-{
-    const struct zmk_keycode_state_changed *ev =
-        as_zmk_keycode_state_changed(eh);
+static int autocomplete_keycode_listener(
+    const zmk_event_t *eh
+) {
+    const struct
+        zmk_keycode_state_changed *ev =
+            as_zmk_keycode_state_changed(
+                eh
+            );
 
     if (!ev) {
         return ZMK_EV_EVENT_BUBBLE;
@@ -357,52 +406,57 @@ static int autocomplete_keycode_listener(const zmk_event_t *eh)
         return ZMK_EV_EVENT_BUBBLE;
     }
 
-    if (ev->usage_page != HID_USAGE_KEY) {
+    if (ev->usage_page !=
+        HID_USAGE_KEY) {
+
         return ZMK_EV_EVENT_BUBBLE;
     }
 
-    uint32_t keycode = ev->keycode;
+    uint32_t keycode =
+        ev->keycode;
 
-    // ignore modifiers entirely
-    if (is_modifier_keycode(keycode)) {
+    if (is_modifier_keycode(
+            keycode
+        )) {
+
         return ZMK_EV_EVENT_BUBBLE;
     }
 
     uint32_t encoded =
         encoded_from_event(ev);
 
-    /* ----------------------------
-     * BACKSPACE / DELETE handling
-     * ---------------------------- */
-    if (is_backspace(keycode) || is_delete(keycode)) {
+    if (is_backspace(keycode) ||
+        is_delete(keycode)) {
 
-#define AUTOCOMPLETE_POP(n) \
-        do { \
-            if (!autocomplete_data_##n.firing) { \
-                history_pop(&autocomplete_data_##n); \
-            } \
-        } while (0)
+#define AUTOCOMPLETE_POP(n)               \
+    if (!autocomplete_data_##n.firing) { \
+        history_pop(                      \
+            &autocomplete_data_##n        \
+        );                                \
+    }
 
-        DT_INST_FOREACH_STATUS_OKAY(AUTOCOMPLETE_POP);
+        DT_INST_FOREACH_STATUS_OKAY(
+            AUTOCOMPLETE_POP
+        )
 
 #undef AUTOCOMPLETE_POP
 
         return ZMK_EV_EVENT_BUBBLE;
     }
 
-    /* ----------------------------
-     * NORMAL CHARACTER INPUT
-     * ---------------------------- */
+#define AUTOCOMPLETE_PUSH(n)                       \
+    if (!autocomplete_data_##n.firing ||          \
+        autocomplete_data_##n.capturing) {        \
+                                                   \
+        history_push(                              \
+            &autocomplete_data_##n,                \
+            encoded                                \
+        );                                         \
+    }
 
-#define AUTOCOMPLETE_PUSH(n) \
-        do { \
-            if (!autocomplete_data_##n.firing || \
-                autocomplete_data_##n.capturing) { \
-                history_push(&autocomplete_data_##n, encoded); \
-            } \
-        } while (0)
-
-    DT_INST_FOREACH_STATUS_OKAY(AUTOCOMPLETE_PUSH);
+    DT_INST_FOREACH_STATUS_OKAY(
+        AUTOCOMPLETE_PUSH
+    )
 
 #undef AUTOCOMPLETE_PUSH
 
@@ -446,7 +500,9 @@ static int autocomplete_binding_released(
         dev->data;
 
     const struct autocomplete_sequence
-        *matches[AUTOCOMPLETE_MAX_MATCHES];
+        *matches[
+            AUTOCOMPLETE_MAX_MATCHES
+        ];
 
     uint8_t match_count = 0;
     uint8_t prefix_len = 0;
@@ -509,172 +565,71 @@ static const struct behavior_driver_api
 /* DT Helpers                                                                 */
 /* -------------------------------------------------------------------------- */
 
-#define AUTOCOMPLETE_BINDING_ENTRY(node_id, prop, idx) \
-    {                                                  \
-        .behavior_dev = DEVICE_DT_NAME(                \
-            DT_PHANDLE_BY_IDX(                         \
-                node_id,                               \
-                prop,                                  \
-                idx                                    \
-            )                                          \
-        ),                                             \
-                                                       \
-        .param1 =                                      \
-            DT_PHA_BY_IDX_OR(                          \
-                node_id,                               \
-                prop,                                  \
-                idx,                                   \
-                param1,                                \
-                0                                      \
-            ),                                         \
-                                                       \
-        .param2 =                                      \
-            DT_PHA_BY_IDX_OR(                          \
-                node_id,                               \
-                prop,                                  \
-                idx,                                   \
-                param2,                                \
-                0                                      \
-            ),                                         \
+#define AUTOCOMPLETE_CHILD_DECL(child)              \
+    static const uint32_t                           \
+        autocomplete_bindings_##child[] =           \
+            DT_PROP(child, bindings);
+
+#define AUTOCOMPLETE_SEQ_INIT(child)                \
+    {                                               \
+        .bindings =                                 \
+            autocomplete_bindings_##child,          \
+                                                    \
+        .binding_len =                              \
+            ARRAY_SIZE(                             \
+                autocomplete_bindings_##child       \
+            ),                                      \
     },
-
-static bool binding_to_semantic(
-    const struct zmk_behavior_binding *binding,
-    uint32_t *out
-) {
-    /*
-     * Assumes &kp bindings.
-     *
-     * This works for:
-     * - locale keycodes
-     * - shifted symbols
-     *
-     * Runtime listener handles dynamic behaviors.
-     */
-
-    uint32_t usage =
-        binding->param1;
-
-    uint8_t mods =
-        (usage >> 24) & 0xFF;
-
-    uint16_t keycode =
-        usage & 0xFF;
-
-    *out =
-        encode_semantic(
-            mods,
-            HID_USAGE_KEY,
-            keycode
-        );
-
-    return true;
-}
-
-#define AUTOCOMPLETE_CHILD_DECL(child)                 \
-    static const                                       \
-        struct zmk_behavior_binding                    \
-        autocomplete_bindings_##child[] = {            \
-            DT_FOREACH_PROP_ELEM(                      \
-                child,                                 \
-                bindings,                              \
-                AUTOCOMPLETE_BINDING_ENTRY             \
-            )                                          \
-    };
-
-#define AUTOCOMPLETE_SEQ_INIT(child)                   \
-    {                                                  \
-        .bindings =                                    \
-            autocomplete_bindings_##child,             \
-                                                       \
-        .binding_len =                                 \
-            ARRAY_SIZE(                                \
-                autocomplete_bindings_##child          \
-            ),                                         \
-    },
-
-/* -------------------------------------------------------------------------- */
-/* Init                                                                       */
-/* -------------------------------------------------------------------------- */
-
-static int autocomplete_init(
-    const struct device *dev
-) {
-    struct autocomplete_config *cfg =
-        (struct autocomplete_config *)dev->config;
-
-    for (uint8_t i = 0;
-         i < cfg->sequence_count;
-         i++) {
-
-        struct autocomplete_sequence *seq =
-            &cfg->sequences[i];
-
-        seq->semantic_len =
-            seq->binding_len;
-
-        for (uint8_t j = 0;
-             j < seq->binding_len;
-             j++) {
-
-            binding_to_semantic(
-                &seq->bindings[j],
-                &seq->semantic[j]
-            );
-        }
-    }
-
-    return 0;
-}
 
 /* -------------------------------------------------------------------------- */
 /* DT Instantiation                                                           */
 /* -------------------------------------------------------------------------- */
 
-#define AUTOCOMPLETE_INST(n)                           \
-                                                       \
-    DT_FOREACH_CHILD(                                  \
-        DT_DRV_INST(n),                                \
-        AUTOCOMPLETE_CHILD_DECL                        \
-    )                                                  \
-                                                       \
-    static struct autocomplete_sequence                \
-        autocomplete_sequences_##n[] = {               \
-                                                       \
-            DT_FOREACH_CHILD(                          \
-                DT_DRV_INST(n),                        \
-                AUTOCOMPLETE_SEQ_INIT                  \
-            )                                          \
-    };                                                 \
-                                                       \
-    static struct autocomplete_config                  \
-        autocomplete_cfg_##n = {                       \
-                                                       \
-            .max_delay_ms =                            \
-                DT_INST_PROP(                          \
-                    n,                                 \
-                    max_delay_ms                       \
-                ),                                     \
-                                                       \
-            .sequences =                               \
-                autocomplete_sequences_##n,            \
-                                                       \
-            .sequence_count =                          \
-                ARRAY_SIZE(                            \
-                    autocomplete_sequences_##n         \
-                ),                                     \
-    };                                                 \
-                                                       \
-                                                       \
-    BEHAVIOR_DT_INST_DEFINE(                           \
-        n,                                             \
-        autocomplete_init,                             \
-        NULL,                                          \
-        &autocomplete_data_##n,                        \
-        &autocomplete_cfg_##n,                         \
-        APPLICATION,                                   \
-        CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,           \
-        &autocomplete_driver_api                       \
+#define AUTOCOMPLETE_INST(n)                        \
+                                                     \
+    DT_FOREACH_CHILD(                               \
+        DT_DRV_INST(n),                             \
+        AUTOCOMPLETE_CHILD_DECL                     \
+    )                                               \
+                                                     \
+    static const                                    \
+        struct autocomplete_sequence                \
+        autocomplete_sequences_##n[] = {            \
+                                                     \
+            DT_FOREACH_CHILD(                       \
+                DT_DRV_INST(n),                     \
+                AUTOCOMPLETE_SEQ_INIT               \
+            )                                       \
+    };                                              \
+                                                     \
+    static const                                    \
+        struct autocomplete_config                  \
+        autocomplete_cfg_##n = {                    \
+                                                     \
+            .max_delay_ms =                         \
+                DT_INST_PROP(                       \
+                    n,                              \
+                    max_delay_ms                    \
+                ),                                  \
+                                                     \
+            .sequences =                            \
+                autocomplete_sequences_##n,         \
+                                                     \
+            .sequence_count =                       \
+                ARRAY_SIZE(                         \
+                    autocomplete_sequences_##n      \
+                ),                                  \
+    };                                              \
+                                                     \
+    BEHAVIOR_DT_INST_DEFINE(                        \
+        n,                                          \
+        NULL,                                       \
+        NULL,                                       \
+        &autocomplete_data_##n,                     \
+        &autocomplete_cfg_##n,                      \
+        APPLICATION,                                \
+        CONFIG_KERNEL_INIT_PRIORITY_DEFAULT,        \
+        &autocomplete_driver_api                    \
     );
 
 DT_INST_FOREACH_STATUS_OKAY(
