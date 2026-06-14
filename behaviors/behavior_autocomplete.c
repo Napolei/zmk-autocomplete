@@ -295,24 +295,26 @@ static const struct behavior_driver_api api = {
 /* DT WIRING                                                                  */
 /* -------------------------------------------------------------------------- */
 
+#define AUTOCOMPLETE_DATA(n) \
+    static struct autocomplete_data autocomplete_data_##n;
+
 #define AUTOCOMPLETE_CHILD(child) \
     static const uint32_t child##_bind[] = DT_PROP(child, bindings);
 
 #define AUTOCOMPLETE_SEQ(child) \
     { .bindings = child##_bind, .binding_len = ARRAY_SIZE(child##_bind) },
 
-#define AUTOCOMPLETE_INST(n)                                         \
-    DT_FOREACH_CHILD(DT_DRV_INST(n), AUTOCOMPLETE_CHILD)            \
-    static struct autocomplete_sequence seqs_##n[] = {              \
-        DT_FOREACH_CHILD(DT_DRV_INST(n), AUTOCOMPLETE_SEQ)          \
-    };                                                              \
-    static struct autocomplete_config cfg_##n = {                   \
-        .max_delay_ms = DT_INST_PROP(n, max_delay_ms),              \
-        .sequences = seqs_##n,                                      \
-        .sequence_count = ARRAY_SIZE(seqs_##n),                     \
-    };                                                              \
-    BEHAVIOR_DT_INST_DEFINE(n, autocomplete_init, NULL,             \
-        &autocomplete_data_##n, &cfg_##n, APPLICATION,              \
+#define AUTOCOMPLETE_INST(n) \
+    DT_FOREACH_CHILD(DT_DRV_INST(n), AUTOCOMPLETE_CHILD) \
+    static struct autocomplete_sequence seqs_##n[] = { \
+        DT_FOREACH_CHILD(DT_DRV_INST(n), AUTOCOMPLETE_SEQ) \
+    }; \
+    static struct autocomplete_config cfg_##n = { \
+        .sequences = seqs_##n, \
+        .sequence_count = ARRAY_SIZE(seqs_##n), \
+    }; \
+    BEHAVIOR_DT_INST_DEFINE(n, autocomplete_init, NULL, \
+        &autocomplete_data_##n, &cfg_##n, APPLICATION, \
         CONFIG_KERNEL_INIT_PRIORITY_DEFAULT, &api);
 
 DT_INST_FOREACH_STATUS_OKAY(AUTOCOMPLETE_INST);
