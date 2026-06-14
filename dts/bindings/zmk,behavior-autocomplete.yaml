@@ -7,10 +7,10 @@ include: zero_param.yaml
 properties:
   max-delay-ms:
     type: int
-    default: 1500
+    default: 1000
 
 child-binding:
   properties:
     bindings:
-      type: array
+      type: uint32-array
       required: true
