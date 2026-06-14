@@ -10,6 +10,7 @@
 #include <zmk/event_manager.h>
 #include <zmk/events/keycode_state_changed.h>
 #include <zmk/hid.h>
+#include <zmk/behavior.h>
 
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
@@ -42,17 +43,8 @@ struct autocomplete_data {
 
 static struct autocomplete_data global_data;
 
-static uint32_t semantic_from_event(
-    const struct zmk_keycode_state_changed *ev
-) {
-    uint8_t mods =
-        ev->implicit_modifiers |
-        ev->explicit_modifiers;
-
-    return
-        ((uint32_t)mods << 24) |
-        ((uint32_t)ev->usage_page << 16) |
-        (uint32_t)ev->keycode;
+static uint32_t encode(uint32_t keycode) {
+    return keycode;
 }
 
 static bool is_modifier(uint32_t keycode) {
@@ -125,41 +117,17 @@ static bool history_suffix_matches(
     return true;
 }
 
-static uint32_t semantic_from_binding(uint32_t keycode) {
-    return
-        ((uint32_t)HID_USAGE_KEY << 16) |
-        keycode;
-}
-
 static int emit_keycode(
     uint32_t keycode,
     struct zmk_behavior_binding_event event
 ) {
-    struct zmk_behavior_binding binding = {
-        .behavior_dev = "KEY_PRESS",
+    struct zmk_behavior_binding kp = {
+        .behavior_dev = "kp",
         .param1 = keycode,
         .param2 = 0,
     };
 
-    int ret =
-        zmk_behavior_invoke_binding(
-            &binding,
-            event,
-            true
-        );
-
-    if (ret < 0) {
-        return ret;
-    }
-
-    ret =
-        zmk_behavior_invoke_binding(
-            &binding,
-            event,
-            false
-        );
-
-    return ret;
+    return zmk_behavior_invoke_binding(&kp, event, true);
 }
 
 static int autocomplete_listener(
@@ -193,10 +161,7 @@ static int autocomplete_listener(
         return ZMK_EV_EVENT_BUBBLE;
     }
 
-    history_push(
-        semantic_from_event(ev)
-    );
-
+    history_push(encode(ev->keycode));
     return ZMK_EV_EVENT_BUBBLE;
 }
 
@@ -342,10 +307,7 @@ static int autocomplete_init(
              j < seq->binding_len;
              j++) {
 
-            seq->semantic[j] =
-                semantic_from_binding(
-                    seq->bindings[j]
-                );
+            seq->semantic[j] = encode(seq->bindings[j]);
         }
     }
 
