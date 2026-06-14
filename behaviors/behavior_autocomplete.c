@@ -174,19 +174,16 @@ ZMK_SUBSCRIPTION(autocomplete, zmk_keycode_state_changed);
 /* EMISSION FIX                                                              */
 /* -------------------------------------------------------------------------- */
 
-static int emit_key(uint32_t keycode,
-                    struct zmk_behavior_binding_event event) {
+static int emit_binding(
+    const struct zmk_behavior_binding *b,
+    struct zmk_behavior_binding_event event
+) {
+    int ret;
 
-    struct zmk_behavior_binding binding = {
-        .behavior_dev = "KEY_PRESS",
-        .param1 = keycode,
-        .param2 = 0,
-    };
-
-    int ret = zmk_behavior_invoke_binding(&binding, event, true);
+    ret = zmk_behavior_invoke_binding(b, event, true);
     if (ret < 0) return ret;
 
-    return zmk_behavior_invoke_binding(&binding, event, false);
+    return zmk_behavior_invoke_binding(b, event, false);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -270,7 +267,7 @@ done:
     const struct autocomplete_sequence *s = matches[0];
 
     for (int i = 0; i < continuation; i++) {
-        emit_key(s->bindings[best_len + i], e);
+        emit_binding(&s->bindings[best_len + i], e);
     }
 
     d->firing = false;
