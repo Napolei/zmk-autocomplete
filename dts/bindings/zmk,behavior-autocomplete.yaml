@@ -12,5 +12,5 @@ properties:
 child-binding:
   properties:
     bindings:
-      type: uint32-array
+      type: array
       required: true
