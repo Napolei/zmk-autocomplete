@@ -14,7 +14,6 @@
 #include <zmk/events/keycode_state_changed.h>
 #include <zmk/hid.h>
 #include <zmk/keymap.h>
-#include <zmk/behaviors/key_press.h>
 
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 
@@ -261,29 +260,54 @@ static int emit_keycode(
     uint32_t usage,
     struct zmk_behavior_binding_event event
 ) {
-    struct zmk_behavior_binding binding = {
-        .behavior_dev = DT_LABEL(DT_NODELABEL(key_press)),
-        .param1 = usage,
-        .param2 = 0,
+    static const char *candidates[] = {
+        "KEY_PRESS",
+        "KEY_PRESS_0",
     };
 
-    int ret;
+    int ret = -ENODEV;
 
-    ret = zmk_behavior_invoke_binding(
-        &binding,
-        event,
-        true
-    );
+    for (int i = 0;
+         i < ARRAY_SIZE(candidates);
+         i++) {
 
-    if (ret < 0) {
+        const struct device *dev =
+            device_get_binding(
+                candidates[i]
+            );
+
+        if (!dev) {
+            continue;
+        }
+
+        struct zmk_behavior_binding binding = {
+            .behavior_dev = candidates[i],
+            .param1 = usage,
+            .param2 = 0,
+        };
+
+        ret =
+            zmk_behavior_invoke_binding(
+                &binding,
+                event,
+                true
+            );
+
+        if (ret < 0) {
+            continue;
+        }
+
+        ret =
+            zmk_behavior_invoke_binding(
+                &binding,
+                event,
+                false
+            );
+
         return ret;
     }
 
-    return zmk_behavior_invoke_binding(
-        &binding,
-        event,
-        false
-    );
+    return ret;
 }
 
 static int emit_continuation(
