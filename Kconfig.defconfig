@@ -1,0 +1,6 @@
+if ZMK_AUTOCOMPLETE
+
+config ZMK_AUTOCOMPLETE
+    default y
+
+endif
