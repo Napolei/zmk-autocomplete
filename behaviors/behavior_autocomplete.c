@@ -22,8 +22,8 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 /* -------------------------------------------------------------------------- */
 
 struct autocomplete_sequence {
-    const uint32_t *bindings;
-    uint32_t semantic[64];
+    const struct zmk_behavior_binding *bindings; // execution
+    const uint32_t *semantic;                    // matching
     uint8_t binding_len;
 };
 
@@ -119,7 +119,7 @@ static bool seq_matches(const struct autocomplete_sequence *seq,
 /* -------------------------------------------------------------------------- */
 
 static int autocomplete_init(const struct device *dev) {
-    struct autocomplete_config *cfg = dev->config;
+    const struct autocomplete_config *cfg = dev->config;
 
     for (int i = 0; i < cfg->sequence_count; i++) {
         struct autocomplete_sequence *seq =
@@ -295,11 +295,8 @@ static const struct behavior_driver_api api = {
 /* DT WIRING                                                                  */
 /* -------------------------------------------------------------------------- */
 
-#define AUTOCOMPLETE_DATA(n) \
-    static struct autocomplete_data autocomplete_data_##n;
-
 #define AUTOCOMPLETE_CHILD(child) \
-    static const uint32_t child##_bind[] = DT_PROP(child, bindings);
+    static const struct zmk_behavior_binding child##_bind[] = DT_PROP(child, bindings);
 
 #define AUTOCOMPLETE_SEQ(child) \
     { .bindings = child##_bind, .binding_len = ARRAY_SIZE(child##_bind) },
@@ -317,4 +314,4 @@ static const struct behavior_driver_api api = {
         &autocomplete_data_##n, &cfg_##n, APPLICATION, \
         CONFIG_KERNEL_INIT_PRIORITY_DEFAULT, &api);
 
-DT_INST_FOREACH_STATUS_OKAY(AUTOCOMPLETE_INST);
+DT_INST_FOREACH_STATUS_OKAY(AUTOCOMPLETE_DATA);
