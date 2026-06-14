@@ -1,5 +1,3 @@
-// behavior_autocomplete.c
-
 #define DT_DRV_COMPAT zmk_behavior_autocomplete
 
 #include <string.h>
@@ -670,4 +668,4 @@ static const struct behavior_driver_api
 
 DT_INST_FOREACH_STATUS_OKAY(
     AUTOCOMPLETE_INST
-)
+);
