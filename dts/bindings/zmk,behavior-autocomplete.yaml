@@ -1,4 +1,4 @@
-description: ZMK autocomplete behavior
+description: Simple ZMK autocomplete behavior
 
 compatible: "zmk,behavior-autocomplete"
 
@@ -14,4 +14,3 @@ child-binding:
     bindings:
       type: phandle-array
       required: true
-      specifier-space: binding
