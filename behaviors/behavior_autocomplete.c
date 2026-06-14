@@ -1,3 +1,5 @@
+// behavior_autocomplete.c
+
 #define DT_DRV_COMPAT zmk_behavior_autocomplete
 
 #include <string.h>
@@ -20,16 +22,23 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
     CONFIG_ZMK_AUTOCOMPLETE_HISTORY_SIZE
 
 #define AUTOCOMPLETE_MAX_MATCHES 32
+#define AUTOCOMPLETE_MAX_SEQUENCE_LEN 64
 
 struct autocomplete_sequence {
     const uint32_t *bindings;
+
+    uint32_t semantic[
+        AUTOCOMPLETE_MAX_SEQUENCE_LEN
+    ];
+
     uint8_t binding_len;
 };
 
 struct autocomplete_config {
     int32_t max_delay_ms;
 
-    const struct autocomplete_sequence *sequences;
+    struct autocomplete_sequence *sequences;
+
     uint8_t sequence_count;
 };
 
@@ -69,6 +78,16 @@ static inline uint32_t encoded_from_event(
         mods,
         ev->usage_page,
         ev->keycode
+    );
+}
+
+static inline uint32_t binding_to_semantic(
+    uint32_t keycode
+) {
+    return encode_semantic(
+        0,
+        HID_USAGE_KEY,
+        keycode
     );
 }
 
@@ -176,7 +195,7 @@ static bool sequence_matches(
 
     return memcmp(
         history,
-        seq->bindings,
+        seq->semantic,
         history_len *
             sizeof(uint32_t)
     ) == 0;
@@ -219,7 +238,7 @@ longest_shared_continuation(
             }
 
             uint32_t value =
-                seq->bindings[pos];
+                seq->semantic[pos];
 
             if (first) {
 
@@ -313,9 +332,6 @@ static int find_matches(
         return -ENOENT;
     }
 
-    uint8_t best_prefix = 0;
-    uint8_t best_match_count = 0;
-
     uint32_t buffer[
         AUTOCOMPLETE_HISTORY_SIZE
     ];
@@ -355,9 +371,13 @@ static int find_matches(
 
         if (count > 0) {
 
-            best_prefix = len;
-            best_match_count = count;
-            break;
+            *out_match_count =
+                count;
+
+            *out_prefix_len =
+                len;
+
+            return 0;
         }
 
         if (len == 1) {
@@ -365,15 +385,33 @@ static int find_matches(
         }
     }
 
-    if (best_match_count == 0) {
-        return -ENOENT;
+    return -ENOENT;
+}
+
+static int autocomplete_init(
+    const struct device *dev
+) {
+    struct autocomplete_config *cfg =
+        (struct autocomplete_config *)
+            dev->config;
+
+    for (uint8_t i = 0;
+         i < cfg->sequence_count;
+         i++) {
+
+        struct autocomplete_sequence *seq =
+            &cfg->sequences[i];
+
+        for (uint8_t j = 0;
+             j < seq->binding_len;
+             j++) {
+
+            seq->semantic[j] =
+                binding_to_semantic(
+                    seq->bindings[j]
+                );
+        }
     }
-
-    *out_match_count =
-        best_match_count;
-
-    *out_prefix_len =
-        best_prefix;
 
     return 0;
 }
@@ -592,8 +630,7 @@ static const struct behavior_driver_api
         AUTOCOMPLETE_CHILD_DECL                     \
     )                                               \
                                                      \
-    static const                                    \
-        struct autocomplete_sequence                \
+    static struct autocomplete_sequence             \
         autocomplete_sequences_##n[] = {            \
                                                      \
             DT_FOREACH_CHILD(                       \
@@ -602,8 +639,7 @@ static const struct behavior_driver_api
             )                                       \
     };                                              \
                                                      \
-    static const                                    \
-        struct autocomplete_config                  \
+    static struct autocomplete_config               \
         autocomplete_cfg_##n = {                    \
                                                      \
             .max_delay_ms =                         \
@@ -623,7 +659,7 @@ static const struct behavior_driver_api
                                                      \
     BEHAVIOR_DT_INST_DEFINE(                        \
         n,                                          \
-        NULL,                                       \
+        autocomplete_init,                          \
         NULL,                                       \
         &autocomplete_data_##n,                     \
         &autocomplete_cfg_##n,                      \
@@ -634,4 +670,4 @@ static const struct behavior_driver_api
 
 DT_INST_FOREACH_STATUS_OKAY(
     AUTOCOMPLETE_INST
-);
+)
