@@ -1,0 +1,17 @@
+description: ZMK autocomplete behavior
+
+compatible: "zmk,behavior-autocomplete"
+
+include: zero_param.yaml
+
+properties:
+  max-delay-ms:
+    type: int
+    default: 1500
+
+child-binding:
+  properties:
+    bindings:
+      type: phandle-array
+      required: true
+      specifier-space: binding
